@@ -62,10 +62,11 @@
     .top-btn:active { color: var(--ink); }
     .top-btn:disabled { opacity: 0.28; cursor: default; }
     .top-btn:disabled:active { color: var(--ink-2); }
+    .rating-top .back-btn { justify-self: start; }
     .back-btn {
-      background: var(--surface); border: none; border-radius: 10px;
-      font-size: 15px; font-weight: 500; color: var(--ink);
-      min-width: 42px; min-height: 36px; padding: 9px 16px; cursor: pointer; touch-action: manipulation;
+      background: var(--surface); border: none; border-radius: 8px;
+      font-size: 14px; font-weight: 500; color: var(--ink);
+      min-width: 30px; min-height: 30px; padding: 6px 9px; cursor: pointer; touch-action: manipulation;
       -webkit-user-select: none; user-select: none;
       display: inline-flex; align-items: center; justify-content: center;
     }
@@ -1014,10 +1015,12 @@ function getJuz(p)    { for(let i=JUZ_STARTS.length-1;i>=0;i--)if(p>=JUZ_STARTS[
 function getSurah(p)  { let b=SURAH_SORTED[0]; for(const s of SURAH_SORTED){if(s.start<=p)b=s;else break;} return b.num; }
 function getSurahPages(n){
   const s=SURAH_STARTS[n];
-  // If the next surah starts on the same page, this surah only occupies that one page
+  // If the next surah starts on the same page, this surah only occupies that one page.
   if(SURAH_STARTS[n+1]===s) return [s];
   const nx=Object.values(SURAH_STARTS).filter(p=>p>s).sort((a,b)=>a-b)[0];
-  const e=nx?nx-1:604;
+  // Some surahs finish on the same physical page that the next surah starts on.
+  // PAGE_CONTINUATION_VERSE lists continuation pages, so include that shared next page when present.
+  const e=nx?(PAGE_CONTINUATION_VERSE[nx]?nx:nx-1):604;
   return Array.from({length:e-s+1},(_,i)=>s+i);
 }
 function surahsByJuz(){ const g={}; for(let s=1;s<=114;s++){const j=getJuz(SURAH_STARTS[s]);if(!g[j])g[j]=[];g[j].push(s);} return g; }
@@ -1071,6 +1074,14 @@ function isShortSurah(s){ return (PAGE_SURAH_STARTS[SURAH_STARTS[s]]||[]).length
 // Surahs shorter than 3 pages are reviewed as one surah-level card instead of page-by-page.
 function isSurahCard(s){ return getSurahPages(s).length<3; }
 function isWholeSurahMemorized(s,pages=S.pages){const sp=getSurahPages(s);return sp.length>0&&sp.every(p=>pages.includes(p));}
+function compactSurahsForPage(p,pages=S.pages){
+  const r=[];
+  for(let s=1;s<=114;s++){
+    if(!isSurahCard(s)||S.removedSurahs.has(s)||S.retiredSurahs.has(s)||!S.surahCards[s])continue;
+    if(isWholeSurahMemorized(s,pages)&&getSurahPages(s).includes(p))r.push(s);
+  }
+  return r;
+}
 function getMemorizedShortSurahs(pages){ const r=new Set(); for(const p of pages) for(const s of (PAGE_SURAH_STARTS[p]||[])) if(isShortSurah(s))r.add(s); return[...r]; }
 
 function buildRatingQueue(duePages) {
@@ -1151,6 +1162,16 @@ function getDue(cards,pages){
   const t=today(), due=[], seenSurahs=new Set();
   for(const p of pages){
     if(S.retired.has(p))continue;
+    const coveredSurahs=compactSurahsForPage(p,pages);
+    if(coveredSurahs.length){
+      for(const s of coveredSurahs){
+        if(!seenSurahs.has(s)&&S.surahCards[s]&&S.surahCards[s].due<=t){
+          seenSurahs.add(s);
+          due.push(SURAH_STARTS[s]);
+        }
+      }
+      continue;
+    }
     const starts=PAGE_SURAH_STARTS[p]||[];
     const surahStarts=starts.filter(s=>isSurahCard(s)&&isWholeSurahMemorized(s,pages));
     if(surahStarts.length){
@@ -1180,6 +1201,16 @@ function getUpcomingEntries(){
   const add=(due, page, surah, cardType='page')=>{if(due)entries.push({due,page,surah,cardType});};
   for(const p of S.pages){
     if(S.retired.has(p))continue;
+    const coveredSurahs=compactSurahsForPage(p);
+    if(coveredSurahs.length){
+      coveredSurahs.forEach(s=>{
+        if(!seenSurahs.has(s)){
+          seenSurahs.add(s);
+          add(S.surahCards[s]?.due,SURAH_STARTS[s],s,'surah');
+        }
+      });
+      continue;
+    }
     const starts=PAGE_SURAH_STARTS[p]||[];
     const compactStarts=starts.filter(s=>isSurahCard(s)&&isWholeSurahMemorized(s));
     if(compactStarts.length){
@@ -1245,8 +1276,10 @@ const S={
   selectMode:false, selectedForRating:new Set(),
   selectedSurah:null, selection:new Set(),
 };
-S.cards=ensureCards(loadCards(),S.pages);
 S.surahCards=loadSurahCards(); // Cards are created only when explicitly added, never auto-discovered
+const missingSurahPages=[...new Set(Object.keys(S.surahCards).flatMap(s=>isSurahCard(parseInt(s))?getSurahPages(parseInt(s)):[]))].filter(p=>!S.pages.includes(p));
+if(missingSurahPages.length){S.pages=[...S.pages,...missingSurahPages].sort((a,b)=>a-b);savePages(S.pages);}
+S.cards=ensureCards(loadCards(),S.pages);
 S.surahCards=ensureCompactSurahCards(S.surahCards,S.pages);
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -1309,7 +1342,7 @@ function formatPageAyahs(ayahs){
 }
 function currentReviewPages(item){
   if(!item)return [];
-  if(item.cardType==='surah'&&item.surah)return getSurahPages(item.surah).filter(p=>S.pages.includes(p));
+  if(item.cardType==='surah'&&item.surah)return getSurahPages(item.surah);
   return [item.page];
 }
 function getCachedPageText(page){
@@ -1871,10 +1904,9 @@ function render(){
     const loadingHtml='<p class="page-text-loading">Loading Quran page…</p>';
     const errorHtml='<div class="revision-prompt"><p class="page-text-loading">Could not load the Quran page. Check your connection and try again.</p><button class="show-words-btn" onclick="retryCurrentReviewText()">Retry</button></div>';
     const promptHtml=reviewPageTextHtml(item)||(reviewFailed?errorHtml:loadingHtml);
-    const pagesLeft=Math.max(0,total-prog);
     const pageNumbers=reviewPages.length>1?`${reviewPages[0]}-${reviewPages[reviewPages.length-1]}`:`${page}`;
     const pageNoun=reviewPages.length===1?'page':'pages';
-    const pageStatus=`${pageNoun[0].toUpperCase()+pageNoun.slice(1)} ${pageNumbers} · ${pagesLeft} revision item${pagesLeft===1?'':'s'} left`;
+    const pageStatus=`${pageNoun[0].toUpperCase()+pageNoun.slice(1)} ${pageNumbers}`;
     app.innerHTML=`<div class="rating-screen"><div class="top-bar rating-top"><button class="back-btn" onclick="exitRating()" title="Exit revision" aria-label="Exit revision"><svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L1 8L8 15"/></svg></button><p class="progress-text" style="margin:0">${prog} / ${total}</p><span aria-hidden="true"></span></div>
       <div class="rating-main">
         <div class="rating-surah-name">${SURAH_NAMES[surah]}</div>
