@@ -172,6 +172,10 @@
     .progress-text { font-size: 13px; color: var(--ink-3); margin-bottom: 36px; text-align: center; }
     .rating-main { text-align: center; margin-bottom: 40px; padding: 0 8px; }
     .rating-surah-name { font-size: 28px; font-weight: 700; color: var(--ink); margin-bottom: 18px; letter-spacing: -0.5px; }
+    .rating-arabic {
+      font-family: 'Geeza Pro', 'Traditional Arabic', 'Arabic Typesetting', serif;
+      font-size: 26px; color: var(--ink); direction: rtl; line-height: 1.9; margin-bottom: 14px;
+    }
     .rating-nav { display: grid; grid-template-columns: 44px 1fr 44px; gap: 10px; align-items: stretch; }
     .rating-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .rating-arrow {
@@ -1612,9 +1616,11 @@ function render(){
     const card=item.cardType==='surah'?(S.surahCards[surah]||{interval:0,ease:2.5,reps:0,due:today()}):S.cards[page];
     const preview=previewLabels(card,S.settings);
     const pageNote=formatPageRuns(pagesForRatingSurah(surah));
+    const verse=getPageVerse(page,surah)||'';
     app.innerHTML=`<div class="top-bar"><button class="back-btn" onclick="exitRating()" title="Exit revision" aria-label="Exit revision"><svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L1 8L8 15"/></svg></button><p class="progress-text" style="margin:0">${prog} / ${total}</p><span style="width:42px" aria-hidden="true"></span></div>
       <div class="rating-main">
         <div class="rating-surah-name">${SURAH_NAMES[surah]} · ${pageNote}</div>
+        ${verse?`<div class="rating-arabic">${verse}</div>`:''}
       </div>
       <div class="rating-nav">
         <button class="rating-arrow" onclick="previousRating()" title="Previous surah" aria-label="Previous surah"${S.ratingIdx>0?'':' disabled'}><svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L1 8L8 15"/></svg></button>
