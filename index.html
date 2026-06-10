@@ -178,6 +178,29 @@
       font-family: 'Geeza Pro', 'Traditional Arabic', 'Arabic Typesetting', serif;
       font-size: 26px; color: var(--ink); direction: rtl; line-height: 1.9; margin-bottom: 14px;
     }
+    .revision-mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 26px; }
+    .mode-btn {
+      border: 1.5px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-2);
+      min-height: 40px; padding: 9px 12px; font-size: 14px; font-weight: 600; cursor: pointer;
+      touch-action: manipulation; -webkit-user-select: none; user-select: none;
+    }
+    .mode-btn.active { background: var(--btn); border-color: var(--btn); color: var(--btn-txt); }
+    .mode-btn:active { opacity: 0.78; }
+    .revision-prompt { margin-bottom: 14px; }
+    .hidden-words {
+      position: relative; border: 1.5px dashed var(--line); border-radius: 16px; background: var(--surface);
+      padding: 18px 16px; min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    }
+    .hidden-words-pattern {
+      font-family: 'Geeza Pro', 'Traditional Arabic', 'Arabic Typesetting', serif;
+      font-size: 26px; direction: rtl; color: var(--ink-3); letter-spacing: 2px; line-height: 1.6;
+    }
+    .show-words-btn {
+      border: none; border-radius: 999px; background: var(--bg); color: var(--ink);
+      padding: 8px 14px; font-size: 14px; font-weight: 600; cursor: pointer; touch-action: manipulation;
+    }
+    .show-words-btn:active { opacity: 0.72; }
+    .revision-hint { font-size: 13px; color: var(--ink-3); line-height: 1.5; margin-top: 10px; }
     .rating-nav { display: grid; grid-template-columns: 44px 1fr 44px; gap: 10px; align-items: stretch; }
     .rating-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .rating-arrow {
@@ -1014,6 +1037,7 @@ function buildRatingQueue(duePages) {
 // ─── Storage ──────────────────────────────────────────────────────────────────
 const KEY_CARDS='hifdh_v1', KEY_PAGES='hifdh_pages', KEY_SETTINGS='hifdh_settings', KEY_RETIRED='hifdh_retired';
 const KEY_SURAH_CARDS='hifdh_surah_v1', KEY_SURAH_RETIRED='hifdh_surah_retired', KEY_SURAH_REMOVED='hifdh_surah_removed';
+const KEY_REVISION_MODE='hifdh_revision_mode';
 const DEFAULT_PAGES=[];
 const DEFAULT_SETTINGS={forgotDays:1,struggledDays:3,easyDays:10,forgotLabel:'Forgot',struggledLabel:'Struggled',easyLabel:'Easy',darkMode:true};
 
@@ -1024,6 +1048,8 @@ const loadSettings=()=>{
   return {...DEFAULT_SETTINGS,...raw};
 };
 const saveSettings=s=>localStorage.setItem(KEY_SETTINGS,JSON.stringify(s));
+const loadRevisionMode=()=>localStorage.getItem(KEY_REVISION_MODE)==='test'?'test':'salah';
+const saveRevisionMode=mode=>localStorage.setItem(KEY_REVISION_MODE,mode==='test'?'test':'salah');
 const loadPages=()=>{const r=localStorage.getItem(KEY_PAGES);if(r)return JSON.parse(r);const p=[...DEFAULT_PAGES];localStorage.setItem(KEY_PAGES,JSON.stringify(p));return p;};
 const savePages=p=>localStorage.setItem(KEY_PAGES,JSON.stringify([...p].sort((a,b)=>a-b)));
 const loadCards=()=>{const r=localStorage.getItem(KEY_CARDS);return r?JSON.parse(r):{};};
@@ -1148,6 +1174,7 @@ const S={
   screen:'home', pages:loadPages(), cards:{}, settings:loadSettings(), retired:loadRetired(),
   surahCards:{}, retiredSurahs:loadSurahRetired(), removedSurahs:loadRemovedSurahs(),
   ratingQueue:[], ratingIdx:0, ratingDate:null, pageRatings:{}, surahRatings:{}, ratingHistory:[], pendingRating:null, moreScrollY:0, openJuzs:new Set(),
+  revisionMode:loadRevisionMode(), wordsRevealed:false,
   selectMode:false, selectedForRating:new Set(),
   selectedSurah:null, selection:new Set(),
 };
@@ -1189,6 +1216,8 @@ function applyTheme(){
 function autoSaveSetting(key,val,el){const days=Math.max(1,parseInt(val)||1);S.settings[key]=days;saveSettings(S.settings);if(el){const unit=el.parentElement?.querySelector('.setting-unit');if(unit)unit.textContent=days===1?'day':'days';}}
 function autoSaveTextSetting(key,val){S.settings[key]=String(val).trim().slice(0,24)||DEFAULT_SETTINGS[key];saveSettings(S.settings);render();}
 function toggleDarkMode(){S.settings.darkMode=!S.settings.darkMode;saveSettings(S.settings);applyTheme();render();}
+function setRevisionMode(mode){S.revisionMode=mode==='test'?'test':'salah';S.wordsRevealed=false;saveRevisionMode(S.revisionMode);render();}
+function revealCurrentPrompt(){S.wordsRevealed=true;render();}
 
 function toggleSelectMode(){S.selectMode=!S.selectMode;S.selectedForRating=new Set();render();}
 function toggleSelectPage(p){S.selectedForRating.has(p)?S.selectedForRating.delete(p):S.selectedForRating.add(p);render();}
@@ -1196,7 +1225,7 @@ function toggleSelectPage(p){S.selectedForRating.has(p)?S.selectedForRating.dele
 function startRating(pagesToRate=null){
   const due=pagesToRate||getDue(S.cards,S.pages);
   S.ratingQueue=buildRatingQueue(due);
-  S.ratingIdx=0;S.ratingDate=today();S.pageRatings={};S.surahRatings={};S.ratingHistory=[];S.pendingRating=null;
+  S.ratingIdx=0;S.ratingDate=today();S.pageRatings={};S.surahRatings={};S.ratingHistory=[];S.pendingRating=null;S.wordsRevealed=false;
   S.selectMode=false;S.selectedForRating=new Set();
   S.screen='rating';render();
 }
@@ -1208,11 +1237,11 @@ function previousRating(){
   if(S.ratingIdx>0){undoLastRating();render();}
 }
 function exitRating(){
-  S.screen='home'; S.ratingQueue=[]; S.ratingIdx=0; S.ratingDate=null; S.pageRatings={}; S.surahRatings={}; S.ratingHistory=[]; S.pendingRating=null; render();
+  S.screen='home'; S.ratingQueue=[]; S.ratingIdx=0; S.ratingDate=null; S.pageRatings={}; S.surahRatings={}; S.ratingHistory=[]; S.pendingRating=null; S.wordsRevealed=false; render();
 }
 function startRatingSingle(p){
   S.ratingQueue=buildRatingQueue([p]);
-  S.ratingIdx=0;S.ratingDate=today();S.pageRatings={};S.surahRatings={};S.ratingHistory=[];S.pendingRating=null;
+  S.ratingIdx=0;S.ratingDate=today();S.pageRatings={};S.surahRatings={};S.ratingHistory=[];S.pendingRating=null;S.wordsRevealed=false;
   S.selectMode=false;
   S.screen='rating';render();
 }
@@ -1238,6 +1267,7 @@ function rate(r){
   }
   S.ratingIdx++;
   S.pendingRating=null;
+  S.wordsRevealed=false;
   if(S.ratingIdx>=S.ratingQueue.length){
     S.screen='home';
     S.ratingQueue=[];
@@ -1266,6 +1296,7 @@ function undoLastRating(){
   }
   S.ratingIdx=Math.max(0,S.ratingIdx-1);
   S.pendingRating=h.rating;
+  S.wordsRevealed=false;
   S.screen='rating';
 }
 
@@ -1347,9 +1378,9 @@ function showModal(title, msg, confirmLabel, _danger, onConfirm){
 
 function hardReset(){
   showModal('Reset all progress?','This cannot be undone.','Reset',true,()=>{
-    [KEY_CARDS,KEY_PAGES,KEY_SETTINGS,KEY_RETIRED,KEY_SURAH_CARDS,KEY_SURAH_RETIRED,KEY_SURAH_REMOVED].forEach(k=>localStorage.removeItem(k));
+    [KEY_CARDS,KEY_PAGES,KEY_SETTINGS,KEY_RETIRED,KEY_SURAH_CARDS,KEY_SURAH_RETIRED,KEY_SURAH_REMOVED,KEY_REVISION_MODE].forEach(k=>localStorage.removeItem(k));
     S.pages=[...DEFAULT_PAGES];S.settings={...DEFAULT_SETTINGS};S.retired=new Set();S.retiredSurahs=new Set();S.removedSurahs=new Set();
-    S.cards=ensureCards({},S.pages);S.surahCards={};saveSurahCards(S.surahCards);S.screen='home';render();
+    S.cards=ensureCards({},S.pages);S.surahCards={};S.revisionMode='salah';S.wordsRevealed=false;saveSurahCards(S.surahCards);S.screen='home';render();
   });
 }
 
@@ -1500,6 +1531,12 @@ function renderManageList(pages, retired=false){
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
+function hiddenWordsPattern(text){
+  const words=String(text||'').trim().split(/\s+/).filter(Boolean);
+  const count=Math.min(Math.max(words.length,3),8);
+  return Array.from({length:count},(_,i)=>i%3===2?'••••••':'••••').join(' ');
+}
+
 function render(){
   applyTheme();
   if(S.screen==='more'){
@@ -1571,10 +1608,9 @@ function render(){
       const juzEnd=JUZ_STARTS[juz]?JUZ_STARTS[juz]-1:604;
       const totalJuzPages=juzEnd-juzStart+1;
       const memJuzPages=S.pages.filter(p=>p>=juzStart&&p<=juzEnd).length;
-      const hasMemorized=memJuzPages>0;
-      const hint=memJuzPages>0?`${memJuzPages}/${totalJuzPages} pages`:'';
+      const hint=memJuzPages>0?`${memJuzPages}/${totalJuzPages} Pages`:`${totalJuzPages} Pages`;
       const rowsHtml=juzSurahs.map(s=>surahRowHtml(s)).join('');
-      return`<details class="juz-details"${S.openJuzs.has(juz)?' open':''}\><summary class="juz-summary"><div class="juz-summary-left"><span class="juz-summary-num">Juz ${juz}</span>${hint?`<span class="juz-summary-surahs">${hint}</span>`:''}</div><span class="juz-summary-arrow">›</span></summary><div class="juz-details-body">${rowsHtml}</div></details>`;
+      return`<details class="juz-details"${S.openJuzs.has(juz)?' open':''}\><summary class="juz-summary"><div class="juz-summary-left"><span class="juz-summary-num">Juz ${juz}</span><span class="juz-summary-surahs">${hint}</span></div><span class="juz-summary-arrow">›</span></summary><div class="juz-details-body">${rowsHtml}</div></details>`;
     }).join('');
     app.innerHTML=`<div style="margin-bottom:32px"><button class="back-btn" onclick="goHome()"><svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L1 8L8 15"/></svg></button></div>
       <p class="section-title">Revision intervals</p>
@@ -1629,10 +1665,18 @@ function render(){
     const names=ratingNames(S.settings);
     const pageNote=formatPageRuns(pagesForRatingSurah(surah));
     const verse=getPageVerse(page,surah)||'';
+    const testing=S.revisionMode==='test';
+    const promptHtml=verse?(testing&&!S.wordsRevealed
+      ?`<div class="revision-prompt"><div class="hidden-words"><div class="hidden-words-pattern" aria-label="Words hidden">${hiddenWordsPattern(verse)}</div><button class="show-words-btn" onclick="revealCurrentPrompt()">Show words</button></div><p class="revision-hint">Recite the first words from memory, then reveal them to check yourself.</p></div>`
+      :`<div class="rating-arabic">${verse}</div>`):'';
     app.innerHTML=`<div class="top-bar"><button class="back-btn" onclick="exitRating()" title="Exit revision" aria-label="Exit revision"><svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L1 8L8 15"/></svg></button><p class="progress-text" style="margin:0">${prog} / ${total}</p><span style="width:42px" aria-hidden="true"></span></div>
+      <div class="revision-mode-toggle" role="group" aria-label="Revision mode">
+        <button class="mode-btn${testing?'':' active'}" onclick="setRevisionMode('salah')" aria-pressed="${testing?'false':'true'}">Salah list</button>
+        <button class="mode-btn${testing?' active':''}" onclick="setRevisionMode('test')" aria-pressed="${testing?'true':'false'}">Test myself</button>
+      </div>
       <div class="rating-main">
         <div class="rating-surah-name">${SURAH_NAMES[surah]} · ${pageNote}</div>
-        ${verse?`<div class="rating-arabic">${verse}</div>`:''}
+        ${promptHtml}
       </div>
       <div class="rating-nav">
         <button class="rating-arrow" onclick="previousRating()" title="Previous surah" aria-label="Previous surah"${S.ratingIdx>0?'':' disabled'}><svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L1 8L8 15"/></svg></button>
