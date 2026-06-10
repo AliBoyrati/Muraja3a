@@ -73,7 +73,10 @@
     .summary strong { color: var(--ink); font-weight: 600; }
 
     /* ── Section label ────────────────────────────────────────────── */
-    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--ink-3); margin-bottom: 14px; }
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--ink-3); margin-bottom: 12px; }
+    .home-content { margin-top: 28px; }
+    .section-block { margin-top: 34px; }
+    .section-block:first-child { margin-top: 0; }
     .section-title { font-size: 18px; font-weight: 600; color: var(--ink); margin-bottom: 16px; }
 
     /* ── Juz grouping (manage / select) ──────────────────────────── */
@@ -257,10 +260,17 @@
     .all-done .tick     { font-size: 40px; margin-bottom: 16px; }
     .all-done .done-msg { font-size: 20px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
     .all-done .done-sub { font-size: 14px; color: var(--ink-3); }
-    .upcoming-item  { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .upcoming-item  { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
     .upcoming-item:last-child { border-bottom: none; }
-    .upcoming-date  { font-size: 15px; color: var(--ink-2); }
-    .upcoming-count { font-size: 13px; color: var(--ink-3); }
+    .upcoming-main { min-width: 0; flex: 1; }
+    .upcoming-date  { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+    .upcoming-detail { font-size: 13px; color: var(--ink); line-height: 1.45; margin-bottom: 3px; }
+    .upcoming-verse {
+      font-family: 'Geeza Pro', 'Traditional Arabic', 'Arabic Typesetting', serif;
+      font-size: 15px; color: var(--ink-2); direction: rtl; text-align: right; line-height: 1.55;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .upcoming-count { font-size: 13px; color: var(--ink-3); white-space: nowrap; padding-top: 2px; }
     .reset-link {
       display: block; text-align: center; margin-top: 56px; padding: 8px;
       font-size: 12px; color: var(--line); cursor: pointer; touch-action: manipulation;
@@ -1045,30 +1055,50 @@ function getDue(cards,pages){
   return due;
 }
 
-function getUpcoming(){
-  const upcoming={}, seenSurahs=new Set();
-  const add=d=>{if(d){if(!upcoming[d])upcoming[d]=0;upcoming[d]++;}};
+function getUpcomingEntries(){
+  const entries=[], seenSurahs=new Set();
+  const add=(due, page, surah, cardType='page')=>{if(due)entries.push({due,page,surah,cardType});};
   for(const p of S.pages){
     if(S.retired.has(p))continue;
     const starts=PAGE_SURAH_STARTS[p]||[];
     const compactStarts=starts.filter(s=>isSurahCard(s)&&isWholeSurahMemorized(s));
     if(compactStarts.length){
-      compactStarts.forEach(s=>{if(!seenSurahs.has(s)&&!S.retiredSurahs.has(s)){seenSurahs.add(s);add(S.surahCards[s]?.due);}});
+      compactStarts.forEach(s=>{
+        if(!seenSurahs.has(s)&&!S.retiredSurahs.has(s)){
+          seenSurahs.add(s);
+          add(S.surahCards[s]?.due,SURAH_STARTS[s],s,'surah');
+        }
+      });
       continue;
     }
     const s=getSurah(p);
     if(isSurahCard(s)&&isWholeSurahMemorized(s)){
-      if(!seenSurahs.has(s)&&!S.retiredSurahs.has(s)){seenSurahs.add(s);add(S.surahCards[s]?.due);}
+      if(!seenSurahs.has(s)&&!S.retiredSurahs.has(s)){
+        seenSurahs.add(s);
+        add(S.surahCards[s]?.due,SURAH_STARTS[s],s,'surah');
+      }
       continue;
     }
-    add(S.cards[p]?.due);
+    add(S.cards[p]?.due,p,s,'page');
   }
-  return upcoming;
+  return entries;
+}
+function getUpcoming(){
+  return getUpcomingEntries().reduce((acc,e)=>{if(!acc[e.due])acc[e.due]=0;acc[e.due]++;return acc;},{});
+}
+function getUpcomingByDate(){
+  return getUpcomingEntries().reduce((acc,e)=>{if(!acc[e.due])acc[e.due]=[];acc[e.due].push(e);return acc;},{});
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 function today(){const d=new Date();const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 function addDays(ds,n){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
+function ordinal(n){const v=n%100;if(v>=11&&v<=13)return `${n}th`;return `${n}${['th','st','nd','rd'][Math.min(n%10,4)]||'th'}`;}
+function formatDate(ds){
+  if(!ds)return '—';
+  const d=new Date(ds+'T00:00:00');
+  return `${d.toLocaleDateString('en-GB',{weekday:'long'})}, ${ordinal(d.getDate())} of ${d.toLocaleDateString('en-GB',{month:'long'})}`;
+}
 function intervalLabel(days){if(days<=1)return'Tomorrow';if(days<7)return`${days} days`;if(days===7)return'1 week';if(days<14)return`${days} days`;if(days<30)return`${Math.round(days/7)} weeks`;if(days<60)return'1 month';return`${Math.round(days/30)} months`;}
 function settingIntervalLabel(days){return `${days} day${days===1?'':'s'}`;}
 
@@ -1155,7 +1185,7 @@ function startRatingSingle(p){
   S.screen='rating';render();
 }
 
-function selectRating(r){S.pendingRating=r;render();}
+function selectRating(r){rate(r);}
 function nextRating(){if(!S.pendingRating)return;rate(S.pendingRating);}
 function rate(r){
   const item=S.ratingQueue[S.ratingIdx];
@@ -1176,7 +1206,17 @@ function rate(r){
   }
   S.ratingIdx++;
   S.pendingRating=null;
-  if(S.ratingIdx>=S.ratingQueue.length)S.screen='done';
+  if(S.ratingIdx>=S.ratingQueue.length){
+    S.screen='home';
+    S.ratingQueue=[];
+    S.ratingIdx=0;
+    S.ratingDate=null;
+    S.pageRatings={};
+    S.surahRatings={};
+    S.ratingHistory=[];
+    render();
+    return;
+  }
   render();
 }
 
@@ -1333,6 +1373,33 @@ function renderDueOverview(duePages){
   }).join('');
 }
 
+function summarizeUpcomingEntry(entry){
+  const pages=entry.cardType==='surah'?getSurahPages(entry.surah):[entry.page];
+  const pageLabel=pages.length>1?`Pages ${pages[0]} → ${pages[pages.length-1]}`:`Page ${entry.page}`;
+  const surahName=SURAH_NAMES[entry.surah]||SURAH_NAMES[getSurah(entry.page)];
+  return `${surahName} · ${pageLabel}`;
+}
+function renderUpcomingList(dates, upcomingByDate, t=today()){
+  return dates.map(d=>{
+    const entries=(upcomingByDate[d]||[]).sort((a,b)=>a.page-b.page||a.surah-b.surah);
+    const count=entries.length;
+    const first=entries[0];
+    const verse=first?(getPageVerse(first.page,first.surah)||''):'';
+    const detail=first?summarizeUpcomingEntry(first):'';
+    const extra=count>1?` + ${count-1} more`:'';
+    const dateLabel=d===t?'Today (retry)':formatDate(d);
+    return`<div class="upcoming-item">
+      <div class="upcoming-main">
+        <div class="upcoming-date">${dateLabel}</div>
+        ${detail?`<div class="upcoming-detail">${detail}${extra}</div>`:''}
+        ${verse?`<div class="upcoming-verse">${verse}</div>`:''}
+      </div>
+      <span class="upcoming-count">${count} page${count>1?'s':''}</span>
+    </div>`;
+  }).join('');
+}
+
+
 // Expanded checkbox list for select mode
 function renderSelectList(duePages){
   if(!duePages.length)return'';
@@ -1427,23 +1494,28 @@ function render(){
 
   // HOME
   if(S.screen==='home'){
+    const upcomingByDate=getUpcomingByDate();
     const upcoming=getUpcoming();
-    const futureDates=Object.keys(upcoming).filter(d=>d>t).sort().slice(0,3);
+    const futureDates=Object.keys(upcomingByDate).filter(d=>d>t).sort().slice(0,3);
 
     if(due.length===0){
       const next=Object.keys(upcoming).sort()[0];
       app.innerHTML=`<div class="top-bar"><h1>Muraja'ah</h1><button class="top-btn" onclick="goMore()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="5" x2="18" y2="5"/><line x1="2" y1="10" x2="18" y2="10"/><line x1="2" y1="15" x2="18" y2="15"/><circle cx="7" cy="5" r="2.2" fill="var(--bg)"/><circle cx="13" cy="10" r="2.2" fill="var(--bg)"/><circle cx="8" cy="15" r="2.2" fill="var(--bg)"/></svg></button></div>
-        <div class="all-done"><div class="tick">✓</div><p class="done-msg">All done for today.</p><p class="done-sub">Next due: <strong>${next||'—'}</strong></p></div>
+        <div class="all-done"><div class="tick">✓</div><p class="done-msg">All done for today.</p><p class="done-sub">Next due: <strong>${next?formatDate(next):'—'}</strong></p></div>
         <span class="reset-link" onclick="hardReset()">reset all progress</span>`;
       return;
     }
 
     app.innerHTML=`<div class="top-bar"><h1>Muraja'ah</h1><button class="top-btn" onclick="goMore()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="5" x2="18" y2="5"/><line x1="2" y1="10" x2="18" y2="10"/><line x1="2" y1="15" x2="18" y2="15"/><circle cx="7" cy="5" r="2.2" fill="var(--bg)"/><circle cx="13" cy="10" r="2.2" fill="var(--bg)"/><circle cx="8" cy="15" r="2.2" fill="var(--bg)"/></svg></button></div>
-      <p class="label">Due today</p>
-      ${renderDueOverview(due)}
-      <button class="btn btn-primary" style="margin-top:24px" onclick="startRating()">Start revision</button>
-      ${futureDates.length?`<div style="margin-top:40px"><p class="label">Coming up</p>
-        ${futureDates.map(d=>`<div class="upcoming-item"><span class="upcoming-date">${d}</span><span class="upcoming-count">${upcoming[d]} page${upcoming[d]>1?'s':''}</span></div>`).join('')}</div>`:''}`;
+      <div class="home-content">
+        <section class="section-block">
+          <p class="label">Due today</p>
+          ${renderDueOverview(due)}
+          <button class="btn btn-primary" style="margin-top:24px" onclick="startRating()">Start revision</button>
+        </section>
+        ${futureDates.length?`<section class="section-block"><p class="label">Coming up</p>
+          ${renderUpcomingList(futureDates,upcomingByDate,t)}</section>`:''}
+      </div>`;
     return;
   }
 
@@ -1561,7 +1633,7 @@ function render(){
         : isStart ? `Page ${page}` : `Page ${page} · continuation`;
     const reviewDate=S.ratingDate||t;
     app.innerHTML=`<div class="top-bar"><button class="back-btn" onclick="exitRating()" title="Exit revision" aria-label="Exit revision"><svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L1 8L8 15"/></svg></button><p class="progress-text" style="margin:0">${prog} / ${total}</p><span style="width:42px" aria-hidden="true"></span></div>
-      <p class="date">${reviewDate}</p>
+      <p class="date">${formatDate(reviewDate)}</p>
       <div class="rating-main">
         <div class="rating-surah-name">${SURAH_NAMES[surah]}</div>
         ${verse?`<div class="rating-arabic">${verse}</div>`:''}
@@ -1579,22 +1651,10 @@ function render(){
     return;
   }
 
-  // DONE
+  // DONE screen is intentionally skipped; finishing revision returns home automatically.
   if(S.screen==='done'){
-    const allRatings=[...Object.values(S.pageRatings).flat(),...Object.values(S.surahRatings).flat()];
-    const forgot=allRatings.filter(r=>r===1).length;
-    const good=allRatings.filter(r=>r===3).length;
-    const total=S.ratingQueue.length;
-    const upcoming=getUpcoming();
-    const nextDates=Object.keys(upcoming).sort().slice(0,4);
-    const reviewDate=S.ratingDate||t;
-    app.innerHTML=`<h1>Done</h1><p class="date">${reviewDate}</p>
-      <p class="summary" style="margin-top:8px"><strong>${total}</strong> rated · <strong>${good}</strong> easy · <strong>${forgot}</strong> forgot</p>
-      <div style="margin-top:40px"><p class="label">Upcoming</p>
-        ${nextDates.map(d=>`<div class="upcoming-item"><span class="upcoming-date">${d===t?'Today (retry)':d}</span><span class="upcoming-count">${upcoming[d]} page${upcoming[d]>1?'s':''}</span></div>`).join('')}
-      </div>
-      <button class="btn btn-ghost" onclick="goHome()" style="margin-top:32px">Back home</button>
-      <span class="reset-link" onclick="hardReset()">reset all progress</span>`;
+    goHome();
+    return;
   }
 }
 
