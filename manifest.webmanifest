@@ -1,6 +1,6 @@
 {
-  "name": "Quranki",
-  "short_name": "Quranki",
+  "name": "QuranKi",
+  "short_name": "QuranKi",
   "description": "A private spaced-repetition app for Quran revision.",
   "start_url": "./index.html",
   "scope": "./",

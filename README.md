@@ -1,6 +1,6 @@
-# Quranki
+# QuranKi
 
-Quranki is an installable, offline-friendly Quran revision app that uses spaced repetition to help you track what to recite today.
+QuranKi is an installable, offline-friendly Quran revision app that uses spaced repetition to help you track what to recite today.
 
 ## Run locally
 
@@ -14,4 +14,4 @@ Then visit <http://localhost:4173>.
 
 ## Install as an app
 
-Quranki includes a web app manifest and service worker, so supported mobile and desktop browsers can install it to the home screen or app launcher. After opening the local or hosted site, use your browser's **Install app** or **Add to Home Screen** option.
+QuranKi includes a web app manifest and service worker, so supported mobile and desktop browsers can install it to the home screen or app launcher. After opening the local or hosted site, use your browser's **Install app** or **Add to Home Screen** option.
